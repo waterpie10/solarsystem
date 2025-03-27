@@ -1,0 +1,200 @@
+<!-- Student ID 11430245 -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lab 2: Sun, Earth, Moon, Clouds, Star Background</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from "https://web.cs.manchester.ac.uk/three/three.js-master/build/three.module.js";
+    import { OrbitControls } from "https://web.cs.manchester.ac.uk/three/three.js-master/examples/jsm/controls/OrbitControls.js";
+
+    
+    let scene, camera, renderer, controls;
+    let sunMesh, earthMesh, moonMesh, cloudMesh;
+    let earthSystem;   
+    let curve;         
+    let starMesh;      
+
+    function init() {
+      scene = new THREE.Scene();
+
+      // Camera
+      camera = new THREE.PerspectiveCamera(
+        75, 
+        window.innerWidth / window.innerHeight, 
+        0.1, 
+        10000
+      );
+      camera.position.set(0, 30, 500);
+      scene.add(camera);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap; // smoother shadows
+
+      document.body.appendChild(renderer.domElement);
+
+      // Controls
+      controls = new OrbitControls(camera, renderer.domElement);
+    //   controls.autoRotate = true;
+
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0x333333);
+      scene.add(ambientLight);
+
+      const pointLight = new THREE.PointLight(0xffffff, 1);
+      pointLight.position.set(0, 0, 0);
+      pointLight.castShadow = true;
+      pointLight.shadow.mapSize.width = 1024;
+      pointLight.shadow.mapSize.height = 1024;
+      pointLight.shadow.camera.near = 0.5;
+      pointLight.shadow.camera.far = 2000;
+      scene.add(pointLight);
+
+
+      // Texture Loader
+      const loader = new THREE.TextureLoader();
+
+      // ---------------------------------
+      // 1) Starry Background (Milky Way)
+      // ---------------------------------
+      const starTexture = loader.load("https://cdn.eso.org/images/large/eso0932a.jpg");
+      const starGeo = new THREE.SphereGeometry(5000, 64, 64);
+      const starMat = new THREE.MeshBasicMaterial({
+        map: starTexture,
+        side: THREE.DoubleSide // Visible from inside
+      });
+      starMesh = new THREE.Mesh(starGeo, starMat);
+      scene.add(starMesh);
+
+      // ---------------------------------
+      // 2) Sun
+      // ---------------------------------
+      const sunTex = loader.load("https://www.solarsystemscope.com/textures/download/2k_sun.jpg");
+      const sunGeo = new THREE.SphereGeometry(109, 400, 200);
+      const sunMat = new THREE.MeshStandardMaterial({
+        emissive: 0xffd700,
+        emissiveMap: sunTex,
+        emissiveIntensity: 1
+      });
+      sunMesh = new THREE.Mesh(sunGeo, sunMat);
+      scene.add(sunMesh);
+
+      // ---------------------------------
+      // 3) Earth
+      // ---------------------------------
+      const earthTex = loader.load("https://upload.wikimedia.org/wikipedia/commons/a/ac/Earthmap1000x500.jpg");
+      const earthGeo = new THREE.SphereGeometry(25, 50, 50);
+      const earthMat = new THREE.MeshPhongMaterial({
+        map: earthTex
+      });
+      earthMesh = new THREE.Mesh(earthGeo, earthMat);
+      earthMesh.receiveShadow = true;
+      earthMesh.castShadow = true;
+
+      // ---------------------------------
+      // 4) Clouds
+      // ---------------------------------
+      const cloudTex = loader.load("https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_350x294x196.jpg");
+      const cloudGeo = new THREE.SphereGeometry(25.2, 50, 50); // slightly bigger radius
+      const cloudMat = new THREE.MeshPhongMaterial({
+        map: cloudTex,
+        transparent: true,
+        opacity: 0.8
+      });
+      cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+      cloudMesh.receiveShadow = true;
+      cloudMesh.castShadow = true;
+
+      earthMesh.add(cloudMesh);
+
+      // ---------------------------------
+      // 5) Moon
+      // ---------------------------------
+      const moonTex = loader.load("https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_1k.jpg");
+      const moonGeo = new THREE.SphereGeometry(5, 40, 20);
+      const moonMat = new THREE.MeshPhongMaterial({
+        map: moonTex
+      });
+      moonMesh = new THREE.Mesh(moonGeo, moonMat);
+      moonMesh.castShadow = true;
+      moonMesh.receiveShadow = true;
+
+      // Position the Moon relative to Earth (x=+50)
+      moonMesh.position.set(50, 0, 0);
+
+      // ---------------------------------
+      // 6) Earth System group
+      // ---------------------------------
+      earthSystem = new THREE.Group();
+      earthSystem.add(earthMesh);
+      earthSystem.add(moonMesh);
+      scene.add(earthSystem);
+
+      // ---------------------------------
+      // 7) Elliptical orbit for Earth
+      // ---------------------------------
+      // EllipseCurve(centerX, centerY, xRadius, yRadius, startAngle, endAngle, clockwise, rotation)
+      curve = new THREE.EllipseCurve(0, 0, 300, 200, 0, 2*Math.PI, false, 0);
+
+      const orbitPoints = curve.getPoints(200);
+      const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+      orbitGeo.rotateX(-Math.PI/2);
+      const orbitMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+      const orbitLine = new THREE.Line(orbitGeo, orbitMat);
+      scene.add(orbitLine);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // time controls Earth’s orbit around the Sun
+      let time = 0.00005 * performance.now();
+      let t = time % 1; // [0..1)
+
+      // Earth (and the Moon with it) revolve around the Sun
+      let pos = curve.getPoint(t);
+      earthSystem.position.set(pos.x, 0, pos.y);
+
+      // Earth spins on its axis
+      earthMesh.rotation.y += 0.02;
+
+      // Clouds spin slightly slower or faster than Earth
+      cloudMesh.rotation.y += 0.018;
+
+      // Moon orbits Earth (in Earth’s local coords)
+      let moonOrbitRadius = 50;
+      let moonSpeed = 50; 
+      let moonAngle = time * moonSpeed;
+      moonMesh.position.set(
+        moonOrbitRadius * Math.cos(moonAngle),
+        0,
+        moonOrbitRadius * Math.sin(moonAngle)
+      );
+
+      // Moon also spins on its axis
+      moonMesh.rotation.y += 0.03;
+
+      // Sun spins on its own axis
+      sunMesh.rotation.y += 0.001;
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    init();
+    animate();
+  </script>
+</body>
+</html>
